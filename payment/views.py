@@ -1,5 +1,5 @@
 import logging
-from django.shortcuts import render
+from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 from rest_framework import permissions, status
 from rest_framework.response import Response
@@ -7,6 +7,7 @@ from rest_framework.serializers import ValidationError
 from django.shortcuts import get_object_or_404
 from .models import Currency, Payment
 from . import serializer
+from datetime import date
 
 # Create your views here.
 class PaymentViewset(ModelViewSet):
@@ -23,7 +24,7 @@ class PaymentViewset(ModelViewSet):
                 {"details": "The details no longer exists."})
 
     def list(self, request, *args, **kwargs):
-        obj = Payment.objects.all()
+        obj = Payment.objects.filter(user=request.user)
         serializer = self.get_serializer(obj, many=True).data
         return Response(serializer, status=status.HTTP_200_OK)
 
@@ -36,9 +37,16 @@ class PaymentViewset(ModelViewSet):
         data = request.data
         currency = data.get("currency")
 
-        if data.get("amount") > 5000:
+        amount = 0
+        get_obj = Payment.objects.filter(user=request.user,
+                                         created_date__gte=date.today())
+        if get_obj:
+            for i in get_obj:
+                amount += i.amount
+        amount += data.get("amount")
+        if amount >= 5000 or data.get("amount") >= 5000:
             return Response({
-                "message": "Amount limit is 5000"
+                "message": "Amount limit is 5000 per day"
             }, status=status.HTTP_400_BAD_REQUEST)
 
         currency_obj = Currency(
@@ -52,8 +60,6 @@ class PaymentViewset(ModelViewSet):
             reference_code=data.get("reference_code"),
             amount=data.get("amount"),
             currency=currency_obj,
-            is_paid=data.get("is_paid"),
-            paid_date=data.get("paid_date")
         )
         payment_obj.save()
 
@@ -82,3 +88,17 @@ class PaymentViewset(ModelViewSet):
         get_obj.delete()
 
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class IsPaidViewset(APIView):
+
+    def put(self, request, pk=None):
+        get_obj = get_object_or_404(Payment, pk=pk)
+        get_obj.is_paid = True
+        get_obj.paid_date = date.today()
+
+        get_obj.save()
+
+        serialize = serializer.PaymentSerializer(get_obj).data
+
+        return Response(serialize, status=status.HTTP_202_ACCEPTED)

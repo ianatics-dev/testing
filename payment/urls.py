@@ -10,4 +10,5 @@ router.register(r"payment", views.PaymentViewset)
 
 urlpatterns = [
     path('', include(router.urls)),
+    path("update_paid/<int:pk>/", views.IsPaidViewset.as_view(), name="is_paid"),
 ]
